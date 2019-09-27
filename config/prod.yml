@@ -1,2 +1,2 @@
-model: "ftrl.model"
+model: "../goFTRL/trained.model"
 port: 50077
