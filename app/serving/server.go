@@ -3,7 +3,9 @@ package serving
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 	"strconv"
@@ -30,11 +32,22 @@ const (
 	FeatureValueSeparator = "X~X"
 )
 
-func (f FeatureName) fromRequest(req *pb.Request) {
+func (f FeatureName) fromRequest(req *pb.Request) (string, error) {
 	switch f {
 	case FeatureZoneID:
-		req.GetZoneId()
+		return strconv.Itoa(int(req.GetZoneId())), nil
+	case FeatureBannerID:
+		return strconv.Itoa(int(req.GetBannerId())), nil
+	case FeatureGeo:
+		return req.GetGeo(), nil
+	case FeatureBrowser:
+		return strconv.Itoa(int(req.GetBrowser())), nil
+	case FeatureOsVersion:
+		return req.GetOsVersion(), nil
+	default:
+		return "", fmt.Errorf("unknown request feature %v", f.StringName())
 	}
+
 }
 
 type FeatureNameString string
@@ -65,13 +78,10 @@ func (f FeatureNameString) IntName() FeatureName {
 	return featureNameFromString[f]
 }
 
-type FeatureValue uint32
+type FeatureValue string
 type Coefficient float32
-
-type IndexKey [2]FeatureName
-type IndexValue [2]FeatureValue
-type ValueMap map[IndexValue]Coefficient
-type CoefficientIndex map[IndexKey]ValueMap
+type ValueMap map[FeatureValue]Coefficient
+type CoefficientIndex map[FeatureNameString]ValueMap
 
 type Yaml map[interface{}]interface{}
 
@@ -92,8 +102,8 @@ func RunServer(config Yaml) *grpc.Server {
 }
 
 type Inferencer struct {
-	features map[IndexKey]bool
-	coef     CoefficientIndex
+	features map[[2]string]bool
+	coef     map[string]map[string]float32
 }
 
 func NewInferencer(config Yaml) *Inferencer {
@@ -102,8 +112,8 @@ func NewInferencer(config Yaml) *Inferencer {
 
 	path := config["model"].(string)
 	obj := Inferencer{
-		features: make(map[IndexKey]bool),
-		coef:     make(CoefficientIndex),
+		features: make(map[[2]string]bool),
+		coef:     make(map[string]map[string]float32),
 	}
 	obj.loadModel(path)
 	return &obj
@@ -132,59 +142,27 @@ func (inf *Inferencer) loadModel(path string) {
 		}
 
 		// parse featurename=featurevalue value
-		kv := strings.Split(tokens[1], "=")
-		name, value := kv[0], kv[1]
+		feature := strings.Split(tokens[1], "=")
+		featureName, featureValue := feature[0], feature[1]
 
-		var mapKey IndexKey
-		var mapVal IndexValue
-		if !strings.Contains(name, "XX") {
-			// simple features e.g. zone_id=12345
-
-			// corner case
-			if value == "fit.other" {
-				continue
-			}
-
-			vint, err := strconv.Atoi(value)
-			if err != nil {
-				log.Fatalf("Cant parse feature %q value to int", value)
-			}
-			mapKey = IndexKey{featureNameFromString[FeatureNameString(name)]}
-			mapVal = IndexValue{FeatureValue(vint)}
-		} else {
-			// double interactions e.g. zone_idXXbanner_id=1234X~X5678
-			nameParts := strings.Split(name, "XX")
-			mapKey = IndexKey{
-				featureNameFromString[FeatureNameString(nameParts[0])],
-				featureNameFromString[FeatureNameString(nameParts[1])],
-			}
-
-			valueParts := strings.Split(value, "X~X")
-			mapVal = IndexValue{}
-			for i, part := range valueParts {
-
-				if part == "fit.other" {
-					continue
-				}
-
-				vint, err := strconv.Atoi(part)
-				if err != nil {
-					log.Fatalf("Cant parse feature %q value to int", value)
-				}
-				mapVal[i] = FeatureValue(vint)
-			}
+		if strings.Contains(featureValue, "fit.other") {
+			continue
 		}
-		//log.Println(line)
-		//log.Println(mapKey)
-		//log.Println(mapVal, coef)
 
-		inner, ok := inf.coef[mapKey]
-		if !ok {
-			inner = make(ValueMap)
-			inner[mapVal] = Coefficient(coef)
-			inf.coef[mapKey] = inner
+		if strings.Contains(featureName, "XX") {
+			parts := strings.Split(featureName, "XX")
+			inf.features[[2]string{parts[0], parts[1]}] = true
 		} else {
-			inf.coef[mapKey][mapVal] = Coefficient(coef)
+			inf.features[[2]string{featureName}] = true
+		}
+
+		inner, ok := inf.coef[featureName]
+		if !ok {
+			inner = make(map[string]float32)
+			inner[featureValue] = float32(coef)
+			inf.coef[featureName] = inner
+		} else {
+			inf.coef[featureName][featureValue] = float32(coef)
 		}
 	}
 
@@ -196,5 +174,32 @@ func (inf *Inferencer) loadModel(path string) {
 
 func (inf *Inferencer) PredictProba(c context.Context,
 	req *pb.Request) (*pb.Response, error) {
-	return &pb.Response{Proba: 0.0, Confidence: 1.0}, nil
+
+	var score float32
+	for feature := range inf.features {
+		if feature[1] == "" {
+			fnum := featureNameFromString[FeatureNameString(feature[0])]
+			val, _ := fnum.fromRequest(req)
+			coef, ok := inf.coef[feature[0]][val]
+			if !ok {
+				fmt.Println(feature, fnum, val)
+			}
+			score += coef
+		} else {
+			value := [2]string{}
+			for i, part := range feature {
+				numname := featureNameFromString[FeatureNameString(part)]
+				value[i], _ = numname.fromRequest(req)
+			}
+			key := feature[0] + FeatureNameSeparator + feature[1]
+			val := value[0] + FeatureValueSeparator + value[1]
+			coef, ok := inf.coef[key][val]
+			if !ok {
+				//fmt.Println(feature, key, val)
+			}
+			score += coef
+		}
+	}
+	prob := 1.0 / (1 + math.Exp(-1*float64(score)))
+	return &pb.Response{Proba: prob, Confidence: 1.0}, nil
 }

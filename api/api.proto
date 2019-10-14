@@ -9,8 +9,10 @@ service Inferencer {
 message Request {
     uint64 banner_id = 1;
     uint64 zone_id = 2;
-    uint64 geo = 3;
-    uint64 platform = 4;
+    string geo = 3;
+    uint64 browser = 4;
+    string os_version = 5;
+    uint64 platform = 6;
 }
 
 message Response {
