@@ -26,8 +26,7 @@ const (
 	FeatureBrowser
 	FeatureOsVersion
 
-	TotalFeatureCount
-
+	TotalFeatureCount     = FeatureOsVersion + 1
 	FeatureNameSeparator  = "XX"
 	FeatureValueSeparator = "X~X"
 )
@@ -78,10 +77,8 @@ func (f FeatureNameString) IntName() FeatureName {
 	return featureNameFromString[f]
 }
 
-type FeatureValue string
+type FeatureValue uint32
 type Coefficient float32
-type ValueMap map[FeatureValue]Coefficient
-type CoefficientIndex map[FeatureNameString]ValueMap
 
 type Yaml map[interface{}]interface{}
 
@@ -101,105 +98,214 @@ func RunServer(config Yaml) *grpc.Server {
 	return grpcServer
 }
 
+// Variable is an interaction of
+// several features
+type Variable struct {
+	size uint8
+	x, y FeatureName
+}
+
+func (v Variable) makeValue(req *pb.Request, kv *KVstore) (Value, error) {
+	switch v.size {
+	case 1:
+		val, _ := v.x.fromRequest(req)
+		res, _ := kv.Get(v.x, val)
+		return Value{size: 1, x: FeatureValue(res)}, nil
+	case 2:
+		val1, _ := v.x.fromRequest(req)
+		val2, _ := v.y.fromRequest(req)
+		res1, _ := kv.Get(v.x, val1)
+		res2, _ := kv.Get(v.y, val2)
+		return Value{size: 2, x: FeatureValue(res1),
+			y: FeatureValue(res2)}, nil
+	default:
+		return Value{}, fmt.Errorf("Nothing to return")
+	}
+}
+
+func (v Variable) String() string {
+	switch v.size {
+	case 0:
+		return fmt.Sprintf("{}")
+	case 1:
+		return fmt.Sprintf("{%v}",
+			featureNameToString[v.x],
+		)
+	case 2:
+		return fmt.Sprintf("{%v, %v}",
+			featureNameToString[v.x],
+			featureNameToString[v.y],
+		)
+	default:
+		return fmt.Sprintf("{}")
+	}
+}
+
+// Value is a set of Variable
+// feature values
+type Value struct {
+	size uint8
+	x, y FeatureValue
+}
+
+type VariableSet map[Variable]bool
+type ValueStore map[Value]Coefficient
+type CoeffStore map[Variable]ValueStore
+
 type Inferencer struct {
-	features map[[2]string]bool
-	coef     map[string]map[string]float32
+	variables VariableSet
+	values    KVstore
+	coef      CoeffStore
 }
 
 func NewInferencer(config Yaml) *Inferencer {
 
 	initFeatureNameFromString()
 
-	path := config["model"].(string)
-	obj := Inferencer{
-		features: make(map[[2]string]bool),
-		coef:     make(map[string]map[string]float32),
-	}
-	obj.loadModel(path)
+	obj := Inferencer{}
+	obj.loadModel(config)
 	return &obj
 }
 
-func (inf *Inferencer) loadModel(path string) {
-	// Todo
-	// - load model
-	// - obtain features and interactions
-	// - obtain coefficients
-	// - save to fast access structure
-	file, err := os.Open(path)
+func (inf *Inferencer) loadModel(config Yaml) {
+	path := config["model"].(string)
+	lines, err := scanfile(path)
 	if err != nil {
-		log.Fatalf("Cant open model file: %s", path)
+		log.Fatalf("Failed to read file: %v", err)
 	}
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		tokens := strings.Split(line, ":")
-
-		// parse coefficient value
-		coef, err := strconv.ParseFloat(tokens[2], 64)
-		if err != nil {
-			log.Fatalf("Cant parse coefficient %s=%s", tokens[1], tokens[2])
-		}
-
-		// parse featurename=featurevalue value
-		feature := strings.Split(tokens[1], "=")
-		featureName, featureValue := feature[0], feature[1]
-
-		if strings.Contains(featureValue, "fit.other") {
-			continue
-		}
-
-		if strings.Contains(featureName, "XX") {
-			parts := strings.Split(featureName, "XX")
-			inf.features[[2]string{parts[0], parts[1]}] = true
-		} else {
-			inf.features[[2]string{featureName}] = true
-		}
-
-		inner, ok := inf.coef[featureName]
-		if !ok {
-			inner = make(map[string]float32)
-			inner[featureValue] = float32(coef)
-			inf.coef[featureName] = inner
-		} else {
-			inf.coef[featureName][featureValue] = float32(coef)
-		}
+	kv, vars, coef, err := parse(lines)
+	if err != nil {
+		log.Fatalf("Failed to parse model: %v", err)
 	}
+	inf.variables = *vars
+	inf.values = *kv
+	inf.coef = *coef
 
-	log.Printf("Model have loaded")
+	log.Printf("Model have loaded successfully!")
 	for k, v := range inf.coef {
 		log.Println(k, len(v))
 	}
 }
 
+func scanfile(path string) (*[]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return &[]string{}, err
+	}
+
+	scanner := bufio.NewScanner(file)
+	lines := make([]string, 0, 1000)
+	for scanner.Scan() {
+		line := scanner.Text()
+		lines = append(lines, line)
+	}
+
+	return &lines, nil
+}
+
+func parse(lines *[]string) (*KVstore, *VariableSet, *CoeffStore, error) {
+	// Format of each line is
+	// <positional No. of feature>:<name>=<value>:<coefficient>
+	// Positional no. of feature is useless for inference
+	// so it's just ignored
+	valuestore := NewKVStore()
+	features := make(VariableSet)
+	coefstore := make(CoeffStore)
+
+	for _, line := range *lines {
+
+		var no, feature, coef string
+		unpackArray(strings.Split(line, ":"), &no, &feature, &coef)
+
+		c, err := strconv.ParseFloat(coef, 64)
+		if err != nil {
+			log.Fatalf("Failed to parse coefficient %s", line)
+		}
+
+		var fname, fval string
+		unpackArray(strings.Split(feature, "="), &fname, &fval)
+
+		if strings.Contains(fval, "fit.other") {
+			continue
+		}
+
+		variable := Variable{}
+		value := Value{}
+		if strings.Contains(fname, "XX") {
+			var l, r string
+			unpackArray(strings.Split(fname, FeatureNameSeparator), &l, &r)
+
+			var ltype, rtype FeatureName
+			typelook([]string{l, r}, &ltype, &rtype)
+
+			variable = Variable{size: 2, x: ltype, y: rtype}
+			features[variable] = true
+
+			var lval, rval string
+			unpackArray(
+				strings.Split(fval, FeatureValueSeparator),
+				&lval, &rval)
+			ltoken, _ := valuestore.Set(ltype, lval)
+			rtoken, _ := valuestore.Set(rtype, rval)
+
+			value = Value{
+				size: 2,
+				x:    FeatureValue(ltoken),
+				y:    FeatureValue(rtoken),
+			}
+		} else {
+			ftype := featureNameFromString[FeatureNameString(fname)]
+			variable = Variable{size: 1, x: ftype}
+			features[variable] = true
+
+			token, _ := valuestore.Set(ftype, fval)
+			value = Value{
+				size: 1,
+				x:    FeatureValue(token),
+			}
+		}
+
+		inner, ok := coefstore[variable]
+		if !ok {
+			inner = make(ValueStore)
+			inner[value] = Coefficient(c)
+			coefstore[variable] = inner
+		} else {
+			coefstore[variable][value] = Coefficient(c)
+		}
+	}
+
+	return valuestore, &features, &coefstore, nil
+}
+
+func unpackArray(arr []string, vars ...*string) {
+	for i, v := range arr {
+		*vars[i] = v
+	}
+}
+
+func typelook(vars []string, types ...*FeatureName) {
+	for i, v := range vars {
+		*types[i] = featureNameFromString[FeatureNameString(v)]
+	}
+}
+
+func Sigmoid(x float32) float64 {
+	return 1.0 / (1 + math.Exp(-1*float64(x)))
+}
+
 func (inf *Inferencer) PredictProba(c context.Context,
 	req *pb.Request) (*pb.Response, error) {
 
-	var score float32
-	for feature := range inf.features {
-		if feature[1] == "" {
-			fnum := featureNameFromString[FeatureNameString(feature[0])]
-			val, _ := fnum.fromRequest(req)
-			coef, ok := inf.coef[feature[0]][val]
-			if !ok {
-				fmt.Println(feature, fnum, val)
-			}
-			score += coef
-		} else {
-			value := [2]string{}
-			for i, part := range feature {
-				numname := featureNameFromString[FeatureNameString(part)]
-				value[i], _ = numname.fromRequest(req)
-			}
-			key := feature[0] + FeatureNameSeparator + feature[1]
-			val := value[0] + FeatureValueSeparator + value[1]
-			coef, ok := inf.coef[key][val]
-			if !ok {
-				//fmt.Println(feature, key, val)
-			}
-			score += coef
+	var score Coefficient
+	for variable := range inf.variables {
+		value, err := variable.makeValue(req, &inf.values)
+		if err != nil {
+			return &pb.Response{}, err
 		}
+		coef := inf.coef[variable][value]
+		score += coef
 	}
-	prob := 1.0 / (1 + math.Exp(-1*float64(score)))
-	return &pb.Response{Proba: prob, Confidence: 1.0}, nil
+	return &pb.Response{Proba: Sigmoid(float32(score)), Confidence: 1.0}, nil
 }

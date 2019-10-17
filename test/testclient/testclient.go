@@ -14,6 +14,15 @@ const (
 	adress = "localhost:50077"
 )
 
+func sendrequest(req *pb.Request, client pb.InferencerClient) (*pb.Response, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+
+	resp, err := client.PredictProba(ctx, req)
+
+	return resp, err
+}
+
 func main() {
 	conn, err := grpc.Dial(adress, grpc.WithInsecure())
 	if err != nil {
@@ -23,26 +32,22 @@ func main() {
 
 	client := pb.NewInferencerClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
 	t := time.Now()
 	success := 0
-	errors := make(map[string]bool)
-	for i := 0; i < 10000; i++ {
-		_, err := client.PredictProba(ctx, &pb.Request{
+	for i := 0; i < 100; i++ {
+		res, err := sendrequest(&pb.Request{
 			BannerId:  4054199,
 			Geo:       "us",
 			ZoneId:    1093182,
 			Browser:   8,
 			OsVersion: "mac10.12",
-		})
+		},
+			client)
 		if err == nil {
 			success++
-		} else {
-			errors[fmt.Sprintf("Failed to get response %v", err)] = true
+			fmt.Println(res)
 		}
 	}
+
 	log.Println("Finished in ", time.Since(t), "Success:", success)
-	log.Println("Errors ", errors)
 }
