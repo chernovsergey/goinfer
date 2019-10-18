@@ -16,6 +16,6 @@ func typelook(vars []string, types ...*FeatureName) {
 	}
 }
 
-func Sigmoid(x float32) float64 {
-	return 1.0 / (1 + math.Exp(-1*float64(x)))
+func Sigmoid(x float64) float64 {
+	return 1.0 / (1 + math.Exp(-1*x))
 }

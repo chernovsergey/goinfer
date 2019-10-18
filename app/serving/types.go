@@ -65,9 +65,6 @@ func (f FeatureName) StringName() FeatureNameString {
 	return featureNameToString[f]
 }
 
-type FeatureValue uint32
-type Coefficient float32
-
 type Yaml map[interface{}]interface{}
 
 // Variable is an interaction of
@@ -82,14 +79,13 @@ func (v Variable) makeValue(req *pb.Request, kv *KVstore) (Value, error) {
 	case 1:
 		val, _ := v.x.fromRequest(req)
 		res, _ := kv.Get(v.x, val)
-		return Value{size: 1, x: FeatureValue(res)}, nil
+		return Value{size: 1, x: res}, nil
 	case 2:
 		val1, _ := v.x.fromRequest(req)
 		val2, _ := v.y.fromRequest(req)
 		res1, _ := kv.Get(v.x, val1)
 		res2, _ := kv.Get(v.y, val2)
-		return Value{size: 2, x: FeatureValue(res1),
-			y: FeatureValue(res2)}, nil
+		return Value{size: 2, x: res1, y: res2}, nil
 	default:
 		return Value{}, fmt.Errorf("Nothing to return")
 	}
@@ -117,9 +113,9 @@ func (v Variable) String() string {
 // feature values
 type Value struct {
 	size uint8
-	x, y FeatureValue
+	x, y uint32
 }
 
 type VariableSet map[Variable]bool
-type ValueStore map[Value]Coefficient
+type ValueStore map[Value]float64
 type CoeffStore map[Variable]ValueStore

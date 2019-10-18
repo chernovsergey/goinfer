@@ -30,7 +30,7 @@ func RunServer(config Yaml) *grpc.Server {
 func (inf *Inferencer) PredictProba(c context.Context,
 	req *pb.Request) (*pb.Response, error) {
 
-	var score Coefficient
+	var score float64
 	for variable := range inf.variables {
 		value, err := variable.makeValue(req, &inf.values)
 		if err != nil {
@@ -39,5 +39,5 @@ func (inf *Inferencer) PredictProba(c context.Context,
 		coef := inf.coef[variable][value]
 		score += coef
 	}
-	return &pb.Response{Proba: Sigmoid(float32(score)), Confidence: 1.0}, nil
+	return &pb.Response{Proba: Sigmoid(score), Confidence: 1.0}, nil
 }

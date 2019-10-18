@@ -109,8 +109,8 @@ func parse(lines *[]string) (*KVstore, *VariableSet, *CoeffStore, error) {
 
 			value = Value{
 				size: 2,
-				x:    FeatureValue(ltoken),
-				y:    FeatureValue(rtoken),
+				x:    ltoken,
+				y:    rtoken,
 			}
 		} else {
 			ftype := featureNameFromString[FeatureNameString(fname)]
@@ -120,17 +120,17 @@ func parse(lines *[]string) (*KVstore, *VariableSet, *CoeffStore, error) {
 			token, _ := valuestore.Set(ftype, fval)
 			value = Value{
 				size: 1,
-				x:    FeatureValue(token),
+				x:    token,
 			}
 		}
 
 		inner, ok := coefstore[variable]
 		if !ok {
 			inner = make(ValueStore)
-			inner[value] = Coefficient(c)
+			inner[value] = c
 			coefstore[variable] = inner
 		} else {
-			coefstore[variable][value] = Coefficient(c)
+			coefstore[variable][value] = c
 		}
 	}
 
