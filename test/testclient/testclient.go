@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -34,8 +33,8 @@ func main() {
 
 	t := time.Now()
 	success := 0
-	for i := 0; i < 100; i++ {
-		res, err := sendrequest(&pb.Request{
+	for i := 0; i < 100000; i++ {
+		_, err := sendrequest(&pb.Request{
 			BannerId:  4054199,
 			Geo:       "us",
 			ZoneId:    1093182,
@@ -45,7 +44,7 @@ func main() {
 			client)
 		if err == nil {
 			success++
-			fmt.Println(res)
+			// fmt.Println(res)
 		}
 	}
 
