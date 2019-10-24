@@ -23,3 +23,13 @@ Enter *goinfer/api* folder!
 
 1) go tool pprof localhost:8080/debug/pprof/profile?seconds=<NUM_SECONDS>
 2) go tool pprof -http=:9090 /path/to/profile/pprof.pb.gz
+
+# TODO
+ - Implement correct model parsing
+ - Implement correct probability prediction
+ - Test performance and ensure 100% CPU usage
+
+# Maybe
+ - latency monitoring
+ - logging
+ - dockerization
