@@ -33,8 +33,6 @@ func Start(ctx context.Context, addr, endpoint string) error {
 		Addr:    addr,
 	}
 
-	srv.ListenAndServe()
-
 	log.Println("starting grpc gateway server", "address", addr)
 	e, _ := errgroup.WithContext(ctx)
 	e.Go(func() error {
