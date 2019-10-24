@@ -1,2 +1,5 @@
 model: "../goFTRL/trained.model"
-port: 50077
+grpc:
+ port: 50077
+gateway:
+ port: 8080

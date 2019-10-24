@@ -2,8 +2,15 @@ syntax = "proto3";
 
 package inferencer;
 
+import "google/api/annotations.proto";
+
 service Inferencer {
-    rpc PredictProba (Request) returns (Response);
+    rpc PredictProba (Request) returns (Response) {
+        option (google.api.http) = {
+            post: "/v1/example/echo"
+            body: "*"
+        };
+    }
 }
 
 message Request {

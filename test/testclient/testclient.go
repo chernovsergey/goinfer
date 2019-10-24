@@ -33,7 +33,7 @@ func main() {
 
 	t := time.Now()
 	success := 0
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 10000000; i++ {
 		_, err := sendrequest(&pb.Request{
 			BannerId:  4054199,
 			Geo:       "us",
