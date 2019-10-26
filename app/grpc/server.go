@@ -5,9 +5,12 @@ import (
 	"log"
 	"math"
 	"net"
+	"time"
 
 	"github.com/chapsuk/wait"
 	pb "github.com/go-code/goinfer/api"
+	"github.com/go-code/goinfer/app/metrics"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/grpc"
 )
 
@@ -51,16 +54,22 @@ func RunListener(port string) *net.Listener {
 	return &lis
 }
 
-func RunServer(config Yaml) *grpc.Server {
-	grpcServer := grpc.NewServer()
-	inferenceServer := NewInferencer(config)
-	pb.RegisterInferencerServer(grpcServer, inferenceServer)
-	return grpcServer
-}
-
 func Start(ctx context.Context, addr string, config Yaml) error {
-	server := RunServer(config)
+
 	listener := RunListener(addr)
+
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
+	)
+	myservice := NewInferencer(config)
+	pb.RegisterInferencerServer(server, myservice)
+
+	grpc_prometheus.EnableHandlingTimeHistogram(
+		grpc_prometheus.WithHistogramBuckets([]float64{
+			.001, .005, .01, .025, .05, .1,
+		}),
+	)
+	grpc_prometheus.Register(server)
 
 	select {
 	case <-ctx.Done():
@@ -69,11 +78,15 @@ func Start(ctx context.Context, addr string, config Yaml) error {
 	case err := <-Errch(func() error { return server.Serve(*listener) }):
 		return err
 	}
-
 }
 
 func (inf *Inferencer) PredictProba(c context.Context,
 	req *pb.Request) (*pb.Response, error) {
+
+	now := time.Now()
+	defer func() {
+		metrics.ProbabilityLatency("predict_proba", time.Since(now).Seconds())
+	}()
 
 	var score float64
 	for variable := range inf.variables {

@@ -4,12 +4,12 @@ package gateway
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 
 	pb "github.com/go-code/goinfer/api"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -26,7 +26,7 @@ func Start(ctx context.Context, addr, endpoint string) error {
 
 	mux := http.DefaultServeMux
 	mux.Handle("/", gatewayMux)
-	mux.HandleFunc("/_health", func(w http.ResponseWriter, req *http.Request) { fmt.Fprint(w, "ok") })
+	mux.Handle("/metrics", promhttp.Handler())
 
 	srv := &http.Server{
 		Handler: mux,
