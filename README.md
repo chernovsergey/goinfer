@@ -17,10 +17,10 @@ Inference service
 
 Enter *goinfer/api* folder!
 
-1) export GOPATH=$(go env GOPATH)
-2) export PATH=$PATH:$GOPATH/bin
-3) protoc -I/usr/local/include -I. -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --go_out=plugins=grpc:. api.proto
-4) protoc -I/usr/local/include -I. -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --grpc-gateway_out=logtostderr=true:. api.proto
+1) `export GOPATH=$(go env GOPATH)`
+2) `export PATH=$PATH:$GOPATH/bin`
+3) `protoc -I/usr/local/include -I. -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --go_out=plugins=grpc:. api.proto`
+4) `protoc -I/usr/local/include -I. -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --grpc-gateway_out=logtostderr=true:. api.proto`
 
 
 # How to profile performance
