@@ -25,8 +25,8 @@ Enter *goinfer/api* folder!
 
 # How to profile performance
 
- - go tool pprof localhost:8080/debug/pprof/profile?seconds=<NUM_SECONDS>
- - go tool pprof -http=:9090 /path/to/profile/pprof.pb.gz
+ - `go tool pprof localhost:8080/debug/pprof/profile?seconds=<NUM_SECONDS>`
+ - `go tool pprof -http=:9090 /path/to/profile/pprof.pb.gz`
 
 # How to configure monitoring
  - Run prometheus server `prometheus --config.file ./config/prometheus.yaml`
@@ -34,11 +34,5 @@ Enter *goinfer/api* folder!
  - Enter grafana, create prometheus date source, create dashboard
 
 # TODO
- - Implement correct model parsing
- - Implement correct probability prediction
- - Test performance and ensure 100% CPU usage
-
-# Maybe
- - latency monitoring
  - logging
  - dockerization
