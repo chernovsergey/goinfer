@@ -1,5 +1,6 @@
-# goinfer
-Inference service 
+# linearinfer
+
+GRPC inference service for logistic regression
 
 # Package dependencies
  - go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
@@ -29,10 +30,15 @@ Enter *goinfer/api* folder!
  - `go tool pprof -http=:9090 /path/to/profile/pprof.pb.gz`
 
 # How to configure monitoring
- - Run prometheus server `prometheus --config.file ./config/prometheus.yaml`
- - Run grafana (default address `localhost:3000`)
- - Enter grafana, create prometheus date source, create dashboard
-
+ - Download and install Prometheus. See [instalation guide](https://prometheus.io/docs/prometheus/latest/getting_started/) 
+ - Run Prometheus server `prometheus --config.file ./config/prometheus.yaml` from your terminal
+ - Download and install Grafana. See [installation guide](https://grafana.com/docs/grafana/latest/guides/getting_started/)
+ - Run grafana (default address `localhost:3000`) with the following commands
+   - sudo systemctl daemon-reload
+   - sudo systemctl start grafana-server
+   - sudo systemctl status grafana-server
+ - Open grafana UI, create prometheus date source, create dashboard (or use already configured one from this repository)
+ 
 # TODO
  - logging
  - dockerization
