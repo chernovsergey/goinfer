@@ -67,8 +67,11 @@ func (f FeatureName) StringName() FeatureNameString {
 
 type Yaml map[interface{}]interface{}
 
-// Variable is an interaction of
-// several features
+// Variable is an abstraction for handling
+// model factors as interaction of one or
+// two variables.
+// Is used for fetching and packing fields
+// of grpc request
 type Variable struct {
 	size uint8
 	x, y FeatureName
@@ -109,8 +112,9 @@ func (v Variable) String() string {
 	}
 }
 
-// Value is a set of Variable
-// feature values
+// Value is an abstraction for handling
+// model factor values, which might contain
+// one or two values
 type Value struct {
 	size uint8
 	x, y uint32

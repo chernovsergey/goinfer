@@ -1,138 +1,64 @@
 package serving
 
 import (
-	"bufio"
-	"log"
-	"os"
-	"strconv"
-	"strings"
+	"context"
+	"time"
+
+	pb "github.com/go-code/goinfer/api"
+	"github.com/go-code/goinfer/app/metrics"
 )
 
-//revive:disable:exported
-
+// Inferencer is simple implementation of grpc
+// InferencerService interface described in protobuf file.
+//
+// In general, it is container for variables, values
+// and coefficients of trained model
+//
+// variables object is used for fetching specific fields from
+// grpc request, converting them to appropriate type
+//
+// values stores enumerated feature values values from serialized model,
+// and used for fast coefficient access for that feature
+//
+// coef stores coefficients of trained model
 type Inferencer struct {
 	variables VariableSet
 	values    KVstore
 	coef      CoeffStore
 }
 
+// NewInferencer produces the instance of of server
 func NewInferencer(config Yaml) *Inferencer {
-
 	initFeatureNameFromString()
-
 	obj := Inferencer{}
 	obj.loadModel(config)
 	return &obj
 }
 
-func (inf *Inferencer) loadModel(config Yaml) {
-	path := config["model"].(string)
-	lines, err := scanfile(path)
-	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
-	}
+// PredictProba is the main function of this project.
+// It predicts probability of outcome given input request
+//
+// Currently this function is supposed to compute probabilities
+// for logistic regression using formula
+//	 p := sigmoid ( sum of cofficients )
+// TODO: But it can be easily transformed to generalized response
+// predictor for any linear model
+func (inf *Inferencer) PredictProba(c context.Context,
+	req *pb.Request) (*pb.Response, error) {
 
-	kv, vars, coef, err := parse(lines)
-	if err != nil {
-		log.Fatalf("Failed to parse model: %v", err)
-	}
-	inf.variables = *vars
-	inf.values = *kv
-	inf.coef = *coef
+	now := time.Now()
+	defer func() {
+		metrics.ProbabilityLatency("predict_proba", time.Since(now).Seconds())
+	}()
 
-	log.Printf("Model have loaded successfully!")
-	for k, v := range inf.coef {
-		log.Println(k, len(v))
-	}
-}
-
-func scanfile(path string) (*[]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return &[]string{}, err
-	}
-
-	scanner := bufio.NewScanner(file)
-	lines := make([]string, 0, 1000)
-	for scanner.Scan() {
-		line := scanner.Text()
-		lines = append(lines, line)
-	}
-
-	return &lines, nil
-}
-
-func parse(lines *[]string) (*KVstore, *VariableSet, *CoeffStore, error) {
-	// Format of each line is
-	// <positional No. of feature>:<name>=<value>:<coefficient>
-	// Positional no. of feature is useless for inference
-	// so it's just ignored
-	valuestore := NewKVStore()
-	features := make(VariableSet)
-	coefstore := make(CoeffStore)
-
-	for _, line := range *lines {
-
-		var no, feature, coef string
-		unpackArray(strings.Split(line, ":"), &no, &feature, &coef)
-
-		c, err := strconv.ParseFloat(coef, 64)
+	var score float64
+	for variable := range inf.variables {
+		value, err := variable.makeValue(req, &inf.values)
 		if err != nil {
-			log.Fatalf("Failed to parse coefficient %s", line)
+			return &pb.Response{}, err
 		}
-
-		var fname, fval string
-		unpackArray(strings.Split(feature, "="), &fname, &fval)
-
-		if strings.Contains(fval, "fit.other") {
-			continue
-		}
-
-		variable := Variable{}
-		value := Value{}
-		if strings.Contains(fname, "XX") {
-			var l, r string
-			unpackArray(strings.Split(fname, FeatureNameSeparator), &l, &r)
-
-			var ltype, rtype FeatureName
-			typelook([]string{l, r}, &ltype, &rtype)
-
-			variable = Variable{size: 2, x: ltype, y: rtype}
-			features[variable] = true
-
-			var lval, rval string
-			unpackArray(
-				strings.Split(fval, FeatureValueSeparator),
-				&lval, &rval)
-			ltoken, _ := valuestore.Set(ltype, lval)
-			rtoken, _ := valuestore.Set(rtype, rval)
-
-			value = Value{
-				size: 2,
-				x:    ltoken,
-				y:    rtoken,
-			}
-		} else {
-			ftype := featureNameFromString[FeatureNameString(fname)]
-			variable = Variable{size: 1, x: ftype}
-			features[variable] = true
-
-			token, _ := valuestore.Set(ftype, fval)
-			value = Value{
-				size: 1,
-				x:    token,
-			}
-		}
-
-		inner, ok := coefstore[variable]
-		if !ok {
-			inner = make(ValueStore)
-			inner[value] = c
-			coefstore[variable] = inner
-		} else {
-			coefstore[variable][value] = c
-		}
+		coef := inf.coef[variable][value]
+		score += coef
 	}
-
-	return valuestore, &features, &coefstore, nil
+	return &pb.Response{Proba: Sigmoid(score), Confidence: 1.0}, nil
 }
