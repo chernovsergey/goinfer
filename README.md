@@ -38,6 +38,8 @@ Enter *goinfer/api* folder!
    - sudo systemctl start grafana-server
    - sudo systemctl status grafana-server
  - Open grafana UI, create prometheus date source, create dashboard (or use already configured one from this repository)
+ ![alt text]("https://github.com/chernovsergey/goinfer/blob/master/config/dashboard_ui.png")
+
  
 # TODO
  - logging
