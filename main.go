@@ -14,6 +14,10 @@ import (
 
 const (
 	CONFIGPATH = "./config/prod.yml"
+
+	// TODO read this params from config
+	GRPCP_PORT   = "50077"
+	GATEWAY_PORT = "8080"
 )
 
 func loadConfig(path string) serving.Yaml {
@@ -39,8 +43,8 @@ func main() {
 
 	config := loadConfig(CONFIGPATH)
 
-	addrGRPC := ":" + "50077"   //strconv.Itoa(config["grpc"]["port"].(int))
-	addrGateway := ":" + "8080" //strconv.Itoa(config["gateway"]["port"].(int))
+	addrGRPC := ":" + GRPCP_PORT
+	addrGateway := ":" + GATEWAY_PORT
 
 	errGateway := serving.Errch(func() error { return gateway.Start(ctx, addrGateway, addrGRPC) })
 	errGRPC := serving.Errch(func() error { return serving.Start(ctx, addrGRPC, config) })
