@@ -1,4 +1,4 @@
-# linearinfer
+# goinfer
 
 GRPC inference service for logistic regression
 
